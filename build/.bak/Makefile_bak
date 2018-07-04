@@ -1,0 +1,85 @@
+LOCAL_PATH=$(shell pwd)
+
+OBJECT=swtest
+OBJ_DIR=obj
+
+#TARGET=linux-x86
+TARGET=ndk
+
+BUILD_TIME := $(shell date "+%Y%m%d%H%M%S")
+
+$(warning "build time: ${BUILD_TIME}")
+
+ifeq ($(TARGET),ndk)
+ANDROID_API=19
+ANDROID_NDK=/opt/android-ndk-r14b
+CC=${ANDROID_NDK}/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-gcc
+CXX=${ANDROID_NDK}/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-g++
+
+CCFLAGS += --sysroot=${ANDROID_NDK}/platforms/android-${ANDROID_API}/arch-arm
+CXXFLAGS += --sysroot=${ANDROID_NDK}/platforms/android-${ANDROID_API}/arch-arm
+
+LDFLAGS += "--sysroot=${ANDROID_NDK}/platforms/android-${ANDROID_API}/arch-arm"
+else
+ifeq ($(TARGET),linux-x86)
+CC=gcc
+CXX=g++
+else
+$(error "Unkown target: ${TARGET}")
+endif
+endif
+
+SRC_FILES += \
+	 test.cpp \
+	 common/SwIpc/SwIpcReply.cpp \
+	 common/SwIpc/SwIpcRequest.cpp \
+	 common/SwIpc/SwIpcClient.cpp \
+	 common/SwIpc/SwIpcServer.cpp
+
+CCFLAGS += -Wno-unused-parameter -Wno-int-to-pointer-cast -Wall
+CCFLAGS += -DBUILD_TIME=\"${BUILD_TIME}\"
+
+CXXFLAGS += -Wno-unused-parameter -Wno-int-to-pointer-cast -Wall
+CXXFLAGS += -fno-rtti -fno-exceptions
+CXXFLAGS += -DBUILD_TIME=\"${BUILD_TIME}\"
+
+INCLS := \
+	-I${LOCAL_PATH}/. \
+	-I${LOCAL_PATH}/common \
+	-I${LOCAL_PATH}/common/SwIpc \
+	-I${LOCAL_PATH}/curl/${TARGET}/include \
+
+SHARED_LIBS := \
+	-lz \
+	-lstdc++ \
+	-l:${LOCAL_PATH}/libpcap/${TARGET}/lib/libpcap.a \
+	-l:${LOCAL_PATH}/curl/${TARGET}/lib/libcurl.a \
+
+LDFLAGS += -fno-rtti -fno-exceptions
+DEBUG_FLAGS = -g
+
+OBJS += $(patsubst %.c,$(OBJ_DIR)/%.o,$(filter %.c,$(SRC_FILES)))
+OBJS += $(patsubst %.cpp,$(OBJ_DIR)/%.o,$(filter %.cpp,$(SRC_FILES)))
+
+ifeq (,$(filter %.cpp,$(SRC_FILES)))
+	BUILD_OBJECT := $(CC)
+else
+	BUILD_OBJECT := $(CXX)
+endif
+
+$(OBJECT): $(OBJS)
+	$(BUILD_OBJECT) -o $@ $(OBJS) $(STATIC_LIBS) $(SHARED_LIBS) $(LDFLAGS) $(DEBUG_FLAGS)
+
+$(OBJ_DIR)/%.o:%.c
+	@echo '<$(CXX)> Compiling object file "$@" ...'
+	$(Q_)mkdir -p $(dir $@)
+	$(Q_)${CC} $(CCFLAGS) $(INCLS) $(DEBUG_FLAGS) -c $< -o $@
+
+$(OBJ_DIR)/%.o:%.cpp
+	@echo '<$(CXX)> Compiling object file "$@" ...'
+	$(Q_)mkdir -p $(dir $@)
+	$(Q_)${CXX} $(CXXFLAGS) $(INCLS) $(DEBUG_FLAGS) -c $< -o $@
+
+clean:
+	rm -rf $(OBJECT) $(OBJ_DIR)
+
